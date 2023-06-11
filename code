@@ -1,0 +1,341 @@
+#define USE_WIFI_NINA         false
+#define USE_WIFI101           true
+#include <WiFiWebServer.h>
+#include <Tlv493d.h>
+#include<Arduino.h>
+
+const char ssid[] = "EEERover";
+const char pass[] = "exhibition";
+const int groupNumber = 20; //Set at a different group number as 18 doesn't work
+int rightMotorEN = 2;
+int rightMotorDIR = 3;
+int leftMotorEN = 8;
+int leftMotorDIR = 9;
+
+int  tmp=0;
+
+//Webpage to return when root is requested
+//<style> used to style the buttons and page
+//<dl> and <dt> used to put buttons in a list so they can be arranged on the page as i like
+//When each button is clicked the specified function is called on
+//Each function sends a different HTTP request
+//Using server.send a string can be send and printed on the page using <span>
+//Backslash shows which parts of the code is part of the HTML code
+const char webpage[] = \
+"<html><head><style>\
+body {text-align: center;}\
+.btn {padding: 14px 28px;font-size: 15px;width:100px;height:100px;\
+.btn:hover {background: #eee;}\
+</style></head>\
+<body>\
+<h1>\
+ROVER CONTROL CENTRE\
+</h1>\
+<dl>\
+<dt>\
+<button class=\"btn\" onclick=\"forwardOn()\">FORWARD</button>\
+</dt>\
+<dt>\
+<button class=\"btn\" onclick=\"leftOn()\">LEFT</button>\
+<button class=\"btn\" onclick=\"stopRover()\">STOP</button>\
+<button class=\"btn\" onclick=\"rightOn()\">RIGHT</button>\
+</dt>\
+<dt>\
+<button class=\"btn\" onclick=\"reverseOn()\">REVERSE</button>\
+</dt>\
+</dl>\
+<br>ALIEN: <span id=\"state\">unknown</span>\
+<br><button class=\"btn\" onclick=\"alien()\">SENSORS ON</button>\
+</body>\
+<script>\
+var xhttp = new XMLHttpRequest();\
+xhttp.onreadystatechange = function() {if (this.readyState == 4 && this.status == 200) {document.getElementById(\"state\").innerHTML = this.responseText;}};\
+function forwardOn() {xhttp.open(\"GET\", \"/2/on\"); xhttp.send();}\
+function leftOn() {xhttp.open(\"GET\", \"/3/on\"); xhttp.send();}\
+function rightOn() {xhttp.open(\"GET\", \"/4/on\"); xhttp.send();}\
+function reverseOn() {xhttp.open(\"GET\", \"/5/on\"); xhttp.send();}\
+function stopRover() {xhttp.open(\"GET\", \"/5/off\"); xhttp.send();}\
+function alien() {xhttp.open(\"GET\", \"/6/on\"); xhttp.send();}\
+</script></html>";
+
+WiFiWebServer server(80);
+
+//Return the web page
+void handleRoot()
+{
+  server.send(200, F("text/html"), webpage);
+}
+
+//Sets voltages on the motor driver so both motors are on forward
+void forwardON()
+{
+  digitalWrite(leftMotorEN, HIGH);
+digitalWrite(rightMotorEN, HIGH);
+}
+
+//Right motor is on, left motor is off
+void leftON(){
+  digitalWrite(rightMotorEN, HIGH);
+digitalWrite(leftMotorEN, LOW);
+}
+
+//Left motor is on, right motor is off
+void rightON(){
+  digitalWrite(leftMotorEN, HIGH);
+digitalWrite(rightMotorEN, LOW);
+}
+
+//Both motors are in reverse
+void reverseON(){
+  digitalWrite(leftMotorDIR, HIGH);
+  digitalWrite(rightMotorDIR, HIGH);
+  digitalWrite(leftMotorEN, HIGH);
+  digitalWrite(rightMotorEN, HIGH);
+}
+
+//Both motors are off
+void stopRover(){
+  digitalWrite(leftMotorEN, LOW);
+  digitalWrite(rightMotorEN, LOW);
+  digitalWrite(leftMotorDIR, LOW);
+  digitalWrite(rightMotorDIR, LOW);
+}
+
+// Tlv493d Opject
+Tlv493d Tlv493dMagnetic3DSensor = Tlv493d();
+
+// Number of samples for averaging
+const int numSamples = 10;
+
+// Function to calculate the average flux
+float calculateAverageFlux() {
+  float totalFlux = 0;
+
+  // Take multiple samples and sum up the flux values
+  for (int i = 0; i < numSamples; i++) {
+    Tlv493dMagnetic3DSensor.updateData();
+    delay(100);
+
+    // Get the magnetic field values for each axis
+    float magneticFieldX = Tlv493dMagnetic3DSensor.getX();
+    float magneticFieldY = Tlv493dMagnetic3DSensor.getY();
+    float magneticFieldZ = Tlv493dMagnetic3DSensor.getZ();
+
+    // Calculate the flux for each axis and sum them up
+    float fluxX = magneticFieldX;
+    float fluxY = magneticFieldY; 
+    float fluxZ = magneticFieldZ; 
+
+    //Calculate the magnitude of the magnetic field vector
+    totalFlux += sqrt(fluxX * fluxX + fluxY * fluxY + fluxZ * fluxZ);
+    delay(10);  // Delay between samples
+  }
+
+  // Calculate and return the average flux
+  return totalFlux / numSamples;
+}
+
+//Function for all the sensors and outputs each sensors output
+void alien(){
+//MAGNETIC FIELD:
+  delay(Tlv493dMagnetic3DSensor.getMeasurementDelay());
+  Tlv493dMagnetic3DSensor.updateData();
+  
+  float averageFlux = calculateAverageFlux();
+
+  // Print the magnetic field values and average flux 
+  Serial.print("X = ");
+  Serial.print(Tlv493dMagnetic3DSensor.getX());
+  Serial.print(" mT; Y = ");
+  Serial.print(Tlv493dMagnetic3DSensor.getY());
+  Serial.print(" mT; Z = ");
+  Serial.print(Tlv493dMagnetic3DSensor.getZ());
+  Serial.println(" mT");
+
+  Serial.print("Average Flux: ");
+  Serial.print(averageFlux);
+  Serial.println(" mT");
+
+//AGE:
+  int t_on, t_off, age, average = 0;
+
+  for(int i = 0; i < 10; i++){
+
+  t_on = pulseIn(A0, HIGH) ;
+  t_off = pulseIn(A0, LOW);
+  age = (t_on + t_off)/10;
+  average = average + age;
+  }
+
+  age = average/10;
+
+  Serial.print("age: ");
+  Serial.println(age);
+
+//NAME:
+  String entries[10]; // Array to store the entries
+  int count[10] = {0}; // Array to store the count of each entry
+
+  for (int i = 0; i < 10; i++) {
+    
+    for (int j = 0; j < 4; j++){
+      if (Serial1.available() > 0){
+        char incomingCharacter = Serial1.read();
+        Serial.println(incomingCharacter);
+        if (incomingCharacter == '#'){
+           j = 0;
+           entries[i] += incomingCharacter;
+          delay(10);
+        } else{
+          entries[i] += incomingCharacter;
+          delay(10);
+        }
+        
+      } else{
+        j = j-1;
+      }
+    }
+  }
+    
+  for (int i = 0; i < 10; i++) {
+    for (int j = 0; j < 10; j++) {
+      if (entries[i] == entries[j]) {
+        count[i]++;
+      }
+    }
+  }
+
+  int maxCount = 0;
+  int mostCommonIndex = 0;
+  for (int i = 0; i < 10; i++) {
+    if (count[i] > maxCount) {
+      maxCount = count[i];
+      mostCommonIndex = i;
+    }
+  }
+
+  Serial.print("Most common entry: ");
+  Serial.println(entries[mostCommonIndex]);
+  Serial.print ("Accuracy: ");
+  Serial.print(maxCount*10);
+  Serial.println("%");
+
+
+//OUTPUT TO WEB: 
+  String output;
+  //Adds each sensors output to a string
+  output = F("MAG: ");
+  output += averageFlux;
+  output += F(" mT");
+  output += F(" AGE: ");
+  output += age;
+  output += F(" centuries");
+  output += F(" NAME: ");
+  output += entries[mostCommonIndex];
+  output += F("   counter: ");
+  output += tmp;
+
+  memset(entries, 0, 10);
+  memset(count, 0, 10);
+  //Increases count
+  tmp = tmp + 1;
+  //Prints the string to the webpage
+  server.send(200, F("text/plain"), output);
+}
+
+
+//Generate a 404 response with details of the failed request
+void handleNotFound()
+{
+  String message = F("File Not Found\n\n"); 
+  message += F("URI: ");
+  message += server.uri();
+  message += F("\nMethod: ");
+  message += (server.method() == HTTP_GET) ? F("GET") : F("POST");
+  message += F("\nArguments: ");
+  message += server.args();
+  message += F("\n");
+  for (uint8_t i = 0; i < server.args(); i++)
+  {
+    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+  }
+  server.send(404, F("text/plain"), message);
+}
+
+void setup()
+{
+//Sets up pins for the motor driver
+  pinMode(leftMotorEN, OUTPUT);
+  pinMode(leftMotorDIR, OUTPUT);
+  pinMode(rightMotorEN, OUTPUT);
+  pinMode(rightMotorDIR, OUTPUT);
+
+//Sets up pin for IR sensor
+  pinMode (A0, INPUT) ;
+
+//Initially sets up so both motors are off
+  digitalWrite(leftMotorEN, LOW);
+  digitalWrite(rightMotorEN, LOW);
+  digitalWrite(leftMotorDIR, LOW);
+  digitalWrite(rightMotorDIR, LOW);
+
+  Serial.begin(9600);
+//Sets up Serial1 for radio sensing  
+  Serial1.begin(600);
+
+  //Wait 10s for the serial connection before proceeding
+  //This ensures you can see messages from startup() on the monitor
+  //Remove this for faster startup when the USB host isn't attached
+  while (!Serial && millis() < 10000);  
+
+  Serial.println(F("\nStarting Web Server"));
+
+  //Check WiFi shield is present
+  if (WiFi.status() == WL_NO_SHIELD)
+  {
+    Serial.println(F("WiFi shield not present"));
+    while (true);
+  }
+
+  //Configure the static IP address if group number is set
+  if (groupNumber)
+    WiFi.config(IPAddress(192,168,0,groupNumber+1));
+
+  // attempt to connect to WiFi network
+  Serial.print(F("Connecting to WPA SSID: "));
+  Serial.println(ssid);
+  while (WiFi.begin(ssid, pass) != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print('.');
+  }
+
+  //Register the callbacks to respond to HTTP requests
+  //For each request a function is called on and carried out
+  server.on(F("/"), handleRoot);
+  server.on(F("/2/on"), forwardON);
+  server.on(F("/3/on"), leftON);;
+  server.on(F("/4/on"), rightON);
+  server.on(F("/5/on"), reverseON);
+  server.on(F("/5/off"), stopRover);
+  server.on(F("/6/on"), alien);
+
+  server.onNotFound(handleNotFound);
+  
+  server.begin();
+  
+  Serial.print(F("HTTP server started @ "));
+  Serial.println(static_cast<IPAddress>(WiFi.localIP()));
+
+//Sets up magnetic field sensor
+  while(!Serial);
+  Tlv493dMagnetic3DSensor.begin();
+  Tlv493dMagnetic3DSensor.setAccessMode(Tlv493dMagnetic3DSensor.MASTERCONTROLLEDMODE);
+  Tlv493dMagnetic3DSensor.disableTemp();
+}
+
+//Call the server polling function in the main loop
+void loop()
+{
+  server.handleClient();
+}
