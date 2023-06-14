@@ -12,7 +12,7 @@ int rightMotorDIR = 3;
 int leftMotorEN = 8;
 int leftMotorDIR = 9;
 
-int  tmp=0;
+int  tmp=1;
 
 //Webpage to return when root is requested
 //<style> used to style the buttons and page
@@ -33,19 +33,19 @@ ROVER CONTROL CENTRE\
 </h1>\
 <dl>\
 <dt>\
-<button class=\"btn\" onclick=\"forwardOn()\">FORWARD</button>\
+<button class=\"btn\" onmousedown=\"forwardOn()\" onmouseup=\"stopRover()\">FORWARD</button>\
 </dt>\
 <dt>\
-<button class=\"btn\" onclick=\"leftOn()\">LEFT</button>\
+<button class=\"btn\" onmousedown=\"leftOn()\" onmouseup=\"stopRover()\">LEFT</button>\
 <button class=\"btn\" onclick=\"stopRover()\">STOP</button>\
-<button class=\"btn\" onclick=\"rightOn()\">RIGHT</button>\
+<button class=\"btn\" onmousedown=\"rightOn()\" onmouseup=\"stopRover()\">RIGHT</button>\
 </dt>\
 <dt>\
-<button class=\"btn\" onclick=\"reverseOn()\">REVERSE</button>\
+<button class=\"btn\" onmousedown=\"reverseOn()\" onmouseup=\"stopRover()\">REVERSE</button>\
 </dt>\
 </dl>\
 <br>ALIEN: <span id=\"state\">unknown</span>\
-<br><button class=\"btn\" onclick=\"alien()\">SENSORS ON</button>\
+<br><button class=\"btn\" onclick=\"alien()\">SENSORS</button>\
 </body>\
 <script>\
 var xhttp = new XMLHttpRequest();\
@@ -70,25 +70,29 @@ void handleRoot()
 void forwardON()
 {
   digitalWrite(leftMotorEN, HIGH);
-digitalWrite(rightMotorEN, HIGH);
+  digitalWrite(leftMotorDIR, LOW);
+  digitalWrite(rightMotorEN, HIGH);
+  digitalWrite(rightMotorDIR, HIGH);
 }
 
 //Right motor is on, left motor is off
 void leftON(){
-  digitalWrite(rightMotorEN, HIGH);
-digitalWrite(leftMotorEN, LOW);
+  digitalWrite(leftMotorEN, HIGH);
+  digitalWrite(leftMotorDIR, LOW);
+  digitalWrite(rightMotorEN, LOW);
 }
 
 //Left motor is on, right motor is off
 void rightON(){
-  digitalWrite(leftMotorEN, HIGH);
-digitalWrite(rightMotorEN, LOW);
+  digitalWrite(rightMotorEN, HIGH);
+  digitalWrite(leftMotorEN, LOW);
+  digitalWrite(rightMotorDIR, HIGH);
 }
 
 //Both motors are in reverse
 void reverseON(){
   digitalWrite(leftMotorDIR, HIGH);
-  digitalWrite(rightMotorDIR, HIGH);
+  digitalWrite(rightMotorDIR, LOW);
   digitalWrite(leftMotorEN, HIGH);
   digitalWrite(rightMotorEN, HIGH);
 }
@@ -137,6 +141,9 @@ float calculateAverageFlux() {
 
 //Function for all the sensors and outputs each sensors output
 void alien(){
+  Serial.println("in alien function... starting mag");
+//String used to print to web interface 
+  String output;
 //MAGNETIC FIELD:
   delay(Tlv493dMagnetic3DSensor.getMeasurementDelay());
   Tlv493dMagnetic3DSensor.updateData();
@@ -156,6 +163,19 @@ void alien(){
   Serial.print(averageFlux);
   Serial.println(" mT");
 
+  output = F("MAG: ");
+  output += averageFlux;
+  output += F(" mT");
+
+  if(Tlv493dMagnetic3DSensor.getX() > 0){
+    Serial.println("Polarity = South pole");
+    output += F(" polarity = down");}
+  else{
+    Serial.println("Polarity = North pole");
+    output += F(" polarity = up");}
+  
+  Serial.println("finished mag... starting age");
+  
 //AGE:
   int t_on, t_off, age, average = 0;
 
@@ -172,13 +192,23 @@ void alien(){
   Serial.print("age: ");
   Serial.println(age);
 
+  output += F(" AGE: ");
+  output += age;
+
+  Serial.println("finished age...starting name");
+  
 //NAME:
   String entries[10]; // Array to store the entries
   int count[10] = {0}; // Array to store the count of each entry
+ 
 
+ Serial1.flush();
+ delay(150);
+  
   for (int i = 0; i < 10; i++) {
     
     for (int j = 0; j < 4; j++){
+      
       if (Serial1.available() > 0){
         char incomingCharacter = Serial1.read();
         Serial.println(incomingCharacter);
@@ -190,9 +220,9 @@ void alien(){
           entries[i] += incomingCharacter;
           delay(10);
         }
-        
-      } else{
-        j = j-1;
+      }
+      else{
+        j=j-1;
       }
     }
   }
@@ -219,27 +249,22 @@ void alien(){
   Serial.print ("Accuracy: ");
   Serial.print(maxCount*10);
   Serial.println("%");
-
-
-//OUTPUT TO WEB: 
-  String output;
-  //Adds each sensors output to a string
-  output = F("MAG: ");
-  output += averageFlux;
-  output += F(" mT");
-  output += F(" AGE: ");
-  output += age;
-  output += F(" centuries");
+  
   output += F(" NAME: ");
   output += entries[mostCommonIndex];
-  output += F("   counter: ");
+
+  Serial.print("counter: ");
+  Serial.println(tmp);
+  
+  output += F(" ... counter: ");
   output += tmp;
 
   memset(entries, 0, 10);
   memset(count, 0, 10);
-  //Increases count
+  
+//Increases count
   tmp = tmp + 1;
-  //Prints the string to the webpage
+//Prints the string to the webpage
   server.send(200, F("text/plain"), output);
 }
 
