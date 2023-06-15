@@ -141,10 +141,9 @@ float calculateAverageFlux() {
 
 //Function for all the sensors and outputs each sensors output
 void alien(){
-  Serial.println("in alien function... starting mag");
-//String used to print to web interface 
+  //OUTPUT TO WEB: 
   String output;
-//MAGNETIC FIELD:
+  //MAGNETIC FIELD:
   delay(Tlv493dMagnetic3DSensor.getMeasurementDelay());
   Tlv493dMagnetic3DSensor.updateData();
   
@@ -168,15 +167,13 @@ void alien(){
   output += F(" mT");
 
   if(Tlv493dMagnetic3DSensor.getX() > 0){
-    Serial.println("Polarity = South pole");
+    Serial.println("Polarity = South pole, down");
     output += F(" polarity = down");}
   else{
-    Serial.println("Polarity = North pole");
+    Serial.println("Polarity = North pole, up");
     output += F(" polarity = up");}
   
-  Serial.println("finished mag... starting age");
-  
-//AGE:
+  //AGE:
   int t_on, t_off, age, average = 0;
 
   for(int i = 0; i < 10; i++){
@@ -194,77 +191,79 @@ void alien(){
 
   output += F(" AGE: ");
   output += age;
-
-  Serial.println("finished age...starting name");
   
 //NAME:
   String entries[10]; // Array to store the entries
   int count[10] = {0}; // Array to store the count of each entry
- 
 
- Serial1.flush();
- delay(150);
-  
-  for (int i = 0; i < 10; i++) {
-    
-    for (int j = 0; j < 4; j++){
-      
+  //the below function will flush out the characters in the serial1 buffer
+  while (Serial1.available()){
+    Serial1.read();
+  }
+
+  int serial1unavailablecounter = 0;
+  for (int i = 0; i < 10 && serial1unavailablecounter < 200; i++) {
+    int j = 0;
+    int serial1unavailablecounter = 0;
+    while (j < 4 && serial1unavailablecounter < 200){
       if (Serial1.available() > 0){
         char incomingCharacter = Serial1.read();
-        Serial.println(incomingCharacter);
         if (incomingCharacter == '#'){
-           j = 0;
+           j = 1;
            entries[i] += incomingCharacter;
           delay(10);
         } else{
           entries[i] += incomingCharacter;
           delay(10);
+          j++;
         }
-      }
-      else{
-        j=j-1;
+      } else{
+        serial1unavailablecounter++;
+        delay (1);
       }
     }
-  }
-    
-  for (int i = 0; i < 10; i++) {
+    }
+  
+  if (serial1unavailablecounter < 200){
+    for (int i = 0; i < 10; i++) {
     for (int j = 0; j < 10; j++) {
       if (entries[i] == entries[j]) {
         count[i]++;
       }
     }
-  }
-
-  int maxCount = 0;
-  int mostCommonIndex = 0;
-  for (int i = 0; i < 10; i++) {
-    if (count[i] > maxCount) {
-      maxCount = count[i];
-      mostCommonIndex = i;
     }
+
+    int maxCount = 0;
+    int mostCommonIndex = 0;
+    for (int i = 0; i < 10; i++) {
+      if (count[i] > maxCount) {
+        maxCount = count[i];
+        mostCommonIndex = i;
+      }
+    }
+
+    Serial.print("Most common entry: ");
+    Serial.println(entries[mostCommonIndex]);
+    Serial.print ("Accuracy: ");
+    Serial.print(maxCount*10);
+    Serial.println("%");
+    output += F(" NAME: ");
+    output += entries[mostCommonIndex];
+  } else {
+    Serial.print ("Serial unavailable for too long. lop terminated");
+    output += F(" NAME: serial unavailable");
   }
 
-  Serial.print("Most common entry: ");
-  Serial.println(entries[mostCommonIndex]);
-  Serial.print ("Accuracy: ");
-  Serial.print(maxCount*10);
-  Serial.println("%");
   
-  output += F(" NAME: ");
-  output += entries[mostCommonIndex];
-
   Serial.print("counter: ");
   Serial.println(tmp);
   
   output += F(" ... counter: ");
   output += tmp;
-
-  memset(entries, 0, 10);
-  memset(count, 0, 10);
   
-//Increases count
+  //Increases count
   tmp = tmp + 1;
-//Prints the string to the webpage
+  //Prints the string to the webpage
   server.send(200, F("text/plain"), output);
 }
 
