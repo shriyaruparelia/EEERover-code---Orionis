@@ -4,9 +4,11 @@
 #include <Tlv493d.h>
 #include<Arduino.h>
 
+//Setting up WiFi connection
 const char ssid[] = "EEERover";
 const char pass[] = "exhibition";
-const int groupNumber = 20; //Set at a different group number as 18 doesn't work
+const int groupNumber = 18;
+
 int rightMotorEN = 2;
 int rightMotorDIR = 3;
 int leftMotorEN = 8;
@@ -17,7 +19,9 @@ int  tmp=1;
 //Webpage to return when root is requested
 //<style> used to style the buttons and page
 //<dl> and <dt> used to put buttons in a list so they can be arranged on the page as i like
-//When each button is clicked the specified function is called on
+//Using "onmousedown" and "onmouseup" so while the button is being clicked a specified function is called on 
+//and when the user stops clicking the button a different function is called on
+//For the buttons with "onclick" when the button is clicked one function is called on 
 //Each function sends a different HTTP request
 //Using server.send a string can be send and printed on the page using <span>
 //Backslash shows which parts of the code is part of the HTML code
@@ -162,6 +166,7 @@ void alien(){
   Serial.print(averageFlux);
   Serial.println(" mT");
 
+  //Adds magnetic field output to string
   output = F("MAG: ");
   output += averageFlux;
   output += F(" mT");
@@ -189,6 +194,7 @@ void alien(){
   Serial.print("age: ");
   Serial.println(age);
 
+  //Adds age output to string
   output += F(" AGE: ");
   output += age;
   
@@ -201,6 +207,7 @@ void alien(){
     Serial1.read();
   }
 
+//Reads 10 repeats of the radio signal and outputs the most common name generated
   int serial1unavailablecounter = 0;
   for (int i = 0; i < 10 && serial1unavailablecounter < 200; i++) {
     int j = 0;
@@ -247,17 +254,20 @@ void alien(){
     Serial.print ("Accuracy: ");
     Serial.print(maxCount*10);
     Serial.println("%");
+
+    //Adds name output to string
     output += F(" NAME: ");
     output += entries[mostCommonIndex];
   } else {
     Serial.print ("Serial unavailable for too long. lop terminated");
-    output += F(" NAME: serial unavailable");
+    output += F(" NAME: serial unavailable"); //If there is no radio input then this is printed on webpage
   }
 
   
   Serial.print("counter: ");
   Serial.println(tmp);
-  
+
+  //Counter to know how many times the button is pushed
   output += F(" ... counter: ");
   output += tmp;
   
